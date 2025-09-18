@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Safety SOS App - Final</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin:0;
+           background: linear-gradient(135deg,#ffdde1,#ee9ca7); color:#222; }
+    h1 { padding:18px; margin:0; }
+    .section { margin:18px auto; padding:14px; border-radius:12px; background:#fff;
+              width:88%; max-width:720px; box-shadow:0 4px 10px rgba(0,0,0,0.15);}
+    button { padding:10px 18px; border:none; border-radius:10px; background:#d9534f;
+             color:#fff; cursor:pointer; margin:6px; }
+    button:hover { background:#c9302c; }
+    input, textarea { width:92%; padding:10px; margin:8px 0; border:1px solid #aaa;
+                      border-radius:8px; }
+    #chatbox, #rightsChatbox { text-align:left; max-height:220px; overflow-y:auto;
+                               border:1px solid #ccc; padding:10px; border-radius:8px;
+                               background:#fafafa; }
+    .message { margin:6px 0; padding:8px; border-radius:8px; }
+    .sent { background:#d1ffd1; text-align:right; }
+    .received { background:#f1f1f1; text-align:left; }
+    video { width:100%; margin-top:10px; border-radius:10px; }
+    #map { width:100%; height:280px; border-radius:10px; margin-top:10px; }
+    .helplines { text-align:left; padding-left:18px; }
+    .suggestions { display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:8px;}
+    .suggest-btn { background:#007bff; padding:6px 10px; border-radius:8px; color:#fff; border:none; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <h1>🚨 Safety SOS App! </h1>
+
+  <!-- Immediate Help + Helplines -->
+  <div class="section">
+    <h2>Immediate Help</h2>
+    <button onclick="triggerSOS('button')">Click SOS</button>
+    <button onclick="startListening()">🎤 Voice SOS</button>
+    <p id="output">Click voice and say a keyword like: help, friend, apple, dog</p>
+    <p id="location"></p>
+
+    <div class="helplines">
+      <h4>Quick Helplines</h4>
+      <p><strong>112</strong> — All emergencies & ambulance (tel link)</p>
+      <p><strong>181</strong> — Women Helpline (tel link)</p>
+      <p><strong>1091</strong> — Police Emergency (tel link)</p>
+      <p><strong>1098</strong> — Child Helpline</p>
+      <p style="font-size:0.9em;color:#555">(Tap these on mobile to call.)</p>
+      <p>
+        <a href="tel:112"><button>Call 112</button></a>
+        <a href="tel:181"><button>Call 181</button></a>
+        <a href="tel:1091"><button>Call 1091</button></a>
+      </p>
+    </div>
+  </div>
+
+  <!-- Contacts -->
+  <div class="section">
+    <h2>📞 Emergency Contacts</h2>
+    <input id="contactInput" placeholder="Enter contact name (demo only)">
+    <button onclick="addContact()">Add Contact</button>
+    <ul id="contactsList" style="text-align:left; padding-left:20px;"></ul>
+  </div>
+
+  <!-- Chat with Contact -->
+  <div class="section">
+    <h2>💬 Chat with Contact (demo)</h2>
+    <div id="chatbox"></div>
+    <textarea id="chatInput" placeholder="Type your message to contact..."></textarea><br>
+    <button onclick="sendMessage()">Send</button>
+  </div>
+
+  <!-- Know Your Rights -->
+  <div class="section">
+    <h2>⚖️ Know Your Rights</h2>
+    <div id="rightsChatbox"></div>
+    <textarea id="rightsInput" placeholder="Ask about rights (try one of the suggestion buttons)"></textarea><br>
+    <button onclick="askRights()">Ask</button>
+
+    <div class="suggestions" style="margin-top:10px">
+      <!-- quick-fill suggestion buttons -->
+      <button class="suggest-btn" onclick="fillRights('What are my rights if police stop me?')">Police stop</button>
+      <button class="suggest-btn" onclick="fillRights('What are my rights if I am arrested?')">If arrested</button>
+      <button class="suggest-btn" onclick="fillRights('What are my rights if police enter my home?')">Police enter home</button>
+      <button class="suggest-btn" onclick="fillRights('What are my rights while filing an FIR?')">FIR</button>
+      <button class="suggest-btn" onclick="fillRights('What are my rights if I face domestic violence?')">Domestic violence</button>
+      <button class="suggest-btn" onclick="fillRights('What are my rights at workplace?')">Workplace</button>
+      <button class="suggest-btn" onclick="fillRights('How do I report a cybercrime?')">Report cybercrime</button>
+    </div>
+  </div>
+
+  <!-- Evidence Recorder -->
+  <div class="section">
+    <h2>📹 Evidence Recorder</h2>
+    <button onclick="startRecording()">Start Recording</button>
+    <button onclick="stopRecording()">Stop & Save</button>
+    <video id="recordedVideo" controls></video>
+  </div>
+
+  <!-- Safe Walk Timer -->
+  <div class="section">
+    <h2>⏱️ Safe Walk Timer</h2>
+    <input id="timerInput" type="number" placeholder="Enter minutes (demo: 1)">
+    <button onclick="startTimer()">Start Timer</button>
+    <button onclick="cancelTimer()">Cancel Timer</button>
+    <p id="timerStatus"></p>
+  </div>
+
+  <!-- Map (Leaflet) -->
+  <div class="section">
+    <h2>🚔 Nearby Police Stations (Karnataka sample)</h2>
+    <div id="map"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+  /* ----------------- Utilities ----------------- */
+  function playSosSound() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = 880;
+      o.connect(g);
+      g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.0001, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.01);
+      o.start();
+      setTimeout(()=> {
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.2);
+        o.stop(ctx.currentTime + 0.3);
+      }, 400);
+    } catch(e){ /* ignore if unsupported */ }
+  }
+
+  /* ----------------- SOS & Voice ----------------- */
+  const VOICE_KEYWORDS = ["help","friend","apple","dog"];
+  function triggerSOS(source) {
+    document.getElementById('output').innerText = "🚨 SOS Sent! (by " + source + ")";
+    playSosSound();
+    getLocation();
+  }
+  function sendSOS(){ triggerSOS('button'); }
+
+  function startListening() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      document.getElementById('output').innerText = "⚠️ Speech recognition not supported in this browser.";
+      return;
+    }
+    const rec = new SpeechRecognition();
+    rec.lang = 'en-US';
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    document.getElementById('output').innerText = "🎤 Listening... (say a keyword)";
+    rec.onresult = function(evt) {
+      const spoken = evt.results[0][0].transcript.toLowerCase();
+      document.getElementById('output').innerText = "🎙️ You said: " + spoken;
+      if (VOICE_KEYWORDS.some(k => spoken.includes(k))) {
+        triggerSOS('voice');
+      } else {
+        // show hint
+        document.getElementById('output').innerText += " — no keyword detected (try: help, friend, apple, dog).";
+      }
+    };
+    rec.onerror = function(e) {
+      document.getElementById('output').innerText = "⚠️ Voice error: " + e.error;
+    };
+    rec.onend = function(){ /* stops automatically after phrase */ };
+    try { rec.start(); } catch(e) { document.getElementById('output').innerText = "⚠️ Could not start mic: " + e; }
+  }
+
+  function getLocation() {
+    if (!navigator.geolocation) {
+      document.getElementById('location').innerText = "Geolocation not supported.";
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(pos => {
+      const lat = pos.coords.latitude.toFixed(6), lon = pos.coords.longitude.toFixed(6);
+      const osm = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=18/${lat}/${lon}`;
+      document.getElementById('location').innerHTML = `📍 Location: <a href="${osm}" target="_blank">${lat}, ${lon}</a>`;
+      // center the map on user if map exists
+      try { userMarker && map && map.setView([pos.coords.latitude, pos.coords.longitude], 13); } catch(e){}
+    }, err => {
+      document.getElementById('location').innerText = "Location error: " + err.message;
+    }, { enableHighAccuracy:true, timeout:10000 });
+  }
+
+  /* ----------------- Contacts & Chat ----------------- */
+  let contacts = [];
+  function addContact(){
+    const name = document.getElementById('contactInput').value.trim();
+    if(!name) return;
+    contacts.push(name);
+    renderContacts();
+    document.getElementById('contactInput').value = '';
+  }
+  function renderContacts(){
+    const list = document.getElementById('contactsList');
+    list.innerHTML = '';
+    contacts.forEach(c => {
+      const li = document.createElement('li'); li.textContent = c; list.appendChild(li);
+    });
+  }
+  function sendMessage(){
+    const m = document.getElementById('chatInput').value.trim();
+    if(!m) return;
+    const box = document.getElementById('chatbox');
+    const div = document.createElement('div'); div.className='message sent'; div.textContent = m;
+    box.appendChild(div); box.scrollTop = box.scrollHeight;
+    document.getElementById('chatInput').value = '';
+  }
+
+  /* ----------------- Rights Chatbot (keyword matcher) ----------------- */
+  const RIGHTS_KB = [
+    {
+      keys: ['police stop','stop me','police stop','pulice stop'],
+      title: 'What are my rights if police stop me?',
+      en: "You can ask why you are being stopped, ask the police to show ID, remain silent until a lawyer is present, and you should not be subjected to unnecessary force.",
+      kn: "ಪೊಲೀಸರು ನಿಮಗೆ ಯಾಕೆ ನಿಲ್ಲಿಸಿದ್ದಾರೆ ಎಂದು ಕೇಳಲು ನಿಮಗೆ ಹಕ್ಕಿದೆ, ಪೊಲೀಸ್ ಗುರುತು ತೋರಿಸುವಂತೆ ಕೇಳಬಹುದು, ವಕೀಲರಿಲ್ಲದೇ ಮೌನವಾಗಿರಬಹುದು ಮತ್ತು ಅನಗತ್ಯ ಬಲವನ್ನು ಅನುಭವಿಸಬಾರದು."
+    },
+    {
+      keys: ['arrest','arrested','i am arrested','i was arrested'],
+      title: 'What are my rights if I am arrested?',
+      en: "You have the right to know the reason for arrest, to remain silent, to consult and call a lawyer, and to inform a family member.",
+      kn: "ನೀವು అరెస్ట్ ಆದರೆ, అరెస్ట్ కారణವನ್ನು ತಿಳಿಯುವುದಕ್ಕೆ, ಮೌನವಾಗಿರಲು, ವಕೀಲರೊಂದಿಗೆ సంప్రదಿಸಲು ಮತ್ತು ಕುಟುಂಬಕ್ಕೆ ತಿಳಿಸಲು ಹಕ್ಕುಗಳಿವೆ."
+    },
+    {
+      keys: ['enter my home','enter my house','enter home','home entry'],
+      title: 'What are my rights if police enter my home?',
+      en: "Police generally need a warrant to enter your home except in emergencies or with your permission.",
+      kn: "ತುರ್ತು ಪರಿಸ್ಥಿತಿಗಳಲ್ಲಿ ಅಥವಾ ನಿಮ್ಮ ಅನುಮತಿಯನ್ನು ಹೊರತುಪಡಿಸಿ, ಪೊಲೀಸ್‌ಗೆ ಮನೆ ಪ್ರವೇಶಿಸಲು ಸಾಮಾನ್ಯವಾಗಿ ವಾರಂಟ್ ಅಗತ್ಯವಿದೆ."
+    },
+    {
+      keys: ['fir','file an fir','filing an fir'],
+      title: 'What are my rights while filing an FIR?',
+      en: "You can file an FIR at any police station. The police must register information and provide you a free copy of the FIR.",
+      kn: "ನೀವು ಯಾವುದೇ ಪೊಲೀಸ್ ಠಾಣೆಯಲ್ಲಿ FIR ಹಾಕಬಹುದು. ಪೊಲೀಸ್ ಮಾಹಿತಿ ದಾಖಲಿಸಬೇಕು ಮತ್ತು FIR ನ ಪ್ರತಿಯನ್ನು ಉಚಿತವಾಗಿ ನೀಡಬೇಕು."
+    },
+    {
+      keys: ['domestic violence','domestic','wife beaten'],
+      title: 'What are my rights if I face domestic violence?',
+      en: "You can seek protection orders, medical help, shelter, and free legal aid under the Protection of Women from Domestic Violence Act.",
+      kn: "ಗೃಹ ಹಿಂಸೆಗೆ ಒಳಗಾದರೆ, ರಕ್ಷಣಾ ಆದೇಶ, ವೈದ್ಯಕೀಯ ಸಹಾಯ, ಆಶ್ರಯ ಮತ್ತು ಉಚಿತ ಕಾನೂನು ಸಹಾಯ ಪಡೆಯಬಹುದು."
+    },
+    {
+      keys: ['workplace','harassment at work','posh','sexual harassment'],
+      title: 'What are my rights if I face workplace harassment?',
+      en: "Under POSH, you can complain to the Internal Complaints Committee, request investigation, and seek remedies including transfer or disciplinary action.",
+      kn: "POSH ಅಡಿಯಲ್ಲಿ, ನೀವು ಆಂತರಿಕ ದೂರು ಸಮಿತಿಗೆ ದೂರು ನೀಡಬಹುದು, ತನಿಖೆಯನ್ನು ಕೇಳಬಹುದು ಮತ್ತು ಪರಿಹಾರಗಳನ್ನು ಹುಡುಕಬಹುದು."
+    },
+    {
+      keys: ['public transport','bus','train','auto'],
+      title: 'What are my rights in public transport safety?',
+      en: "You have a right to safe transport. Report harassment to police or transport authorities and seek assistance immediately.",
+      kn: "ಸಾರ್ವಜನಿಕ ಸಾರಿಗೆಯಲ್ಲಿ ನಿಮಗೆ ಸುರಕ್ಷಿತ ಪ್ರಯಾಣದ ಹಕ್ಕಿದೆ. ಅಥವಾ ಕ್ಲಾಹೈನ್."
+    },
+    {
+      keys: ['record','being recorded','recorded without consent'],
+      title: 'What should I do if someone records me without consent?',
+      en: "If recorded without consent, keep evidence, report to police, and ask platforms to remove unlawful content. Seek legal help if needed.",
+      kn: "ನಿಮ್ಮ ಅನುಮತಿ ಇಲ್ಲದೆ ರೆಕಾರ್ಡ್ ಮಾಡಿದರೆ, ಸಾಕ್ಷ್ಯಗಳನ್ನು ಒದಗಿಸಿಕೊಳ್ಳಿ, ಪೊಲೀಸರಿಗೆ ವರದಿ ಮಾಡಿ ಮತ್ತು ಅವೈಧ ವಿಷಯವನ್ನು platforms ನಿಂದ ತೆಗೆಸುವಂತೆ ಕೇಳಿ."
+    },
+    {
+      keys: ['cyber','cybercrime','online scam','report cyber'],
+      title: 'How do I report a cybercrime?',
+      en: "You can report cybercrime to the nearest cyber cell or via the national cybercrime portal (online). Keep digital evidence like screenshots.",
+      kn: "ನೀವು ಸಮೀಪದ ಸೈಬರ್ ಸೆಲ್ ಅಥವಾ ರಾಷ್ಟ್ರೀಯ ಸೈಬರ್ ಕ್ರೈಮ್ ಪೋರ್ಟಲ್ ಮೂಲಕ ಅನ್‌ಲೈನ್‌ನಲ್ಲಿ ದೂರು ದಾಖಲಿಸಬಹುದು. ಸ್ಕ್ರೀನ್ಶಾಟ್‌ಗಳಂತಹ ಡಿಜಿಟಲ್ ದಾಖಲೆಗಳನ್ನು ಉಳಿತಾಯಿಸಿ."
+    },
+    {
+      keys: ['helpline','emergency','112'],
+      title: 'Emergency helplines',
+      en: "Emergency numbers: 112 (all emergencies), 181 (women helpline), 1091 (police), 1098 (child help).",
+      kn: "ತುರ್ತು ಸಂಖ್ಯೆಗಳು:112 (ಎಲ್ಲಾ ತುರ್ತು), 181 (ಮಹಿಳಾ ಸಹಾಯ), 1091 (ಪೊಲೀಸ್), 1098 (ಮಕ್ಕಳ ಸಹಾಯ)."
+    }
+  ];
+
+  function askRights() {
+    const raw = document.getElementById('rightsInput').value.trim();
+    if (!raw) return;
+    const input = raw.toLowerCase();
+    const chatBox = document.getElementById('rightsChatbox');
+
+    // show user message
+    const udiv = document.createElement('div');
+    udiv.className = 'message sent';
+    udiv.textContent = raw;
+    chatBox.appendChild(udiv);
+
+    // find best match by keyword presence
+    let found = null;
+    for (const item of RIGHTS_KB) {
+      for (const k of item.keys) {
+        if (input.includes(k)) { found = item; break; }
+      }
+      if (found) break;
+    }
+
+    // fallback: try partial word match (split words)
+    if (!found) {
+      const words = input.split(/\s+/);
+      outer: for (const item of RIGHTS_KB) {
+        for (const k of item.keys) {
+          for (const w of words) if (k.includes(w) && w.length>3) { found = item; break outer; }
+        }
+      }
+    }
+
+    let replyText = "❓ Sorry, I don't have info on that. Try one of the suggestion buttons.";
+    if (found) replyText = `EN: ${found.en}\n\nKN: ${found.kn}`;
+
+    const bdiv = document.createElement('div');
+    bdiv.className = 'message received';
+    bdiv.textContent = replyText;
+    chatBox.appendChild(bdiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+    document.getElementById('rightsInput').value = '';
+  }
+
+  function fillRights(text){ document.getElementById('rightsInput').value = text; }
+
+  /* ----------------- Recorder ----------------- */
+  let mediaRecorder, recordedChunks = [];
+  async function startRecording(){
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({video:true, audio:true});
+      mediaRecorder = new MediaRecorder(stream);
+      recordedChunks = [];
+      mediaRecorder.ondataavailable = e => { if (e.data.size>0) recordedChunks.push(e.data); };
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(recordedChunks, { type:'video/webm' });
+        const url = URL.createObjectURL(blob);
+        document.getElementById('recordedVideo').src = url;
+        // stop all tracks to free camera
+        stream.getTracks().forEach(t=>t.stop());
+      };
+      mediaRecorder.start();
+      alert('Recording started');
+    } catch(e){
+      alert('Could not start recording: ' + e.message);
+    }
+  }
+  function stopRecording(){
+    if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    else alert('No active recording');
+  }
+
+  /* ----------------- Safe Walk Timer ----------------- */
+  let timer = null, timerEnd = 0;
+  function startTimer(){
+    const mins = Math.max(0, parseInt(document.getElementById('timerInput').value) || 1);
+    timerEnd = Date.now() + mins*60000;
+    document.getElementById('timerStatus').innerText = `⏳ Timer set for ${mins} minute(s)`;
+    if (timer) clearInterval(timer);
+    timer = setInterval(()=> {
+      const rem = Math.max(0, timerEnd - Date.now());
+      const m = Math.floor(rem/60000), s = Math.floor((rem%60000)/1000);
+      document.getElementById('timerStatus').innerText = `⏳ Time left: ${m}:${s.toString().padStart(2,'0')}`;
+      if (rem <= 0) {
+        clearInterval(timer); timer=null;
+        document.getElementById('timerStatus').innerText = '🚨 Timer ended — SOS triggered';
+        triggerSOS('timer');
+      }
+    }, 1000);
+  }
+  function cancelTimer(){ if(timer) clearInterval(timer); timer=null; document.getElementById('timerStatus').innerText='❌ Timer cancelled.'; }
+
+  /* ----------------- Leaflet Map & Police Stations ----------------- */
+  const map = L.map('map').setView([12.9716,77.5946], 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(map);
+  // Sample stations across Karnataka - add more as needed
+  const stations = [
+    {lat:12.9719,lng:77.5937,name:'Cubbon Park Police Station, Bengaluru'},
+    {lat:13.3392,lng:77.1135,name:'Hubli-Dharwad City Police Station, Hubballi'},
+    {lat:15.3173,lng:75.7139,name:'Belagavi Police Station, Belagavi'},
+    {lat:12.2958,lng:76.6394,name:'Mysore City Police Station, Mysuru'},
+    {lat:11.0168,lng:76.9558,name:'Coimbatore (sample nearby)'},
+    {lat:15.4389,lng:75.0102,name:'Dharwad Police Station'}
+  ];
+  let userMarker = null;
+  stations.forEach(s => {
+    L.marker([s.lat,s.lng]).addTo(map).bindPopup(`<strong>${s.name}</strong>`);
+  });
+
+  // try to set view to user location if allowed
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(p => {
+      const lat = p.coords.latitude, lon = p.coords.longitude;
+      map.setView([lat,lon], 12);
+      userMarker = L.marker([lat,lon]).addTo(map).bindPopup('You are here').openPopup();
+    }, ()=>{/* ignore */});
+  }
+  </script>
+</body>
+</html>
